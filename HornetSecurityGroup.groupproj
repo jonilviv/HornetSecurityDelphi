@@ -1,0 +1,36 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{A25BDB6F-2049-44D4-B8C1-CE5F3C3E1C51}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="HornetSecurity.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="HornetSecurity">
+        <MSBuild Projects="HornetSecurity.dproj"/>
+    </Target>
+    <Target Name="HornetSecurity:Clean">
+        <MSBuild Projects="HornetSecurity.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="HornetSecurity:Make">
+        <MSBuild Projects="HornetSecurity.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="HornetSecurity"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="HornetSecurity:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="HornetSecurity:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
