@@ -20,6 +20,7 @@ type
 
     procedure OnTimerTick;
     procedure OnCalculateSHA256Click;
+    procedure OnSelectionChanged(const Selection: TTreeSelection);
   public
     constructor Create(AView: IMainView; ProcessService: IProcessService; SessionService: ISessionService; SHA256Service: ISHA256Service);
   end;
@@ -29,7 +30,9 @@ implementation
 uses
   SessionInfo,
   System.Classes,
-  System.SysUtils;
+  System.SysUtils,
+  System.TypInfo,
+  Winapi.Wtsapi32;
 
 constructor TMainPresenter.Create(AView: IMainView; ProcessService: IProcessService; SessionService: ISessionService; SHA256Service: ISHA256Service);
 begin
@@ -43,6 +46,7 @@ begin
   _view.DisableCalculateSHA256Button();
   _view.SetOnTimerTick(OnTimerTick);
   _view.SetOnCalculateFilesHash256(OnCalculateSHA256Click);
+  _view.SetOnTreeSelectionChanged(OnSelectionChanged);
 end;
 
 procedure TMainPresenter.OnTimerTick();
@@ -138,6 +142,30 @@ begin
 
   thread.FreeOnTerminate := True;
   thread.Start;
+end;
+
+procedure TMainPresenter.OnSelectionChanged(const Selection: TTreeSelection);
+var
+  rows: TArray<string>;
+begin
+  case Selection.Kind of
+    nkProcess:
+      begin
+        SetLength(rows, 3);
+        rows[0] := 'Executable: ' + Selection.Process.ExecutablePath;
+        rows[1] := 'Process ID: ' + Selection.Process.ProcessId.ToString;
+        rows[2] := 'Session ID: ' + Selection.Process.SessionId.ToString;
+        _view.ShowProperties(rows);
+      end;
+    nkSession:
+      begin
+        SetLength(rows, 1);
+        rows[0] := 'Session state: ' + GetEnumName(TypeInfo(WTS_CONNECTSTATE_CLASS), Ord(Selection.Session.State));
+        _view.ShowProperties(rows);
+      end
+  else
+    _view.ClearProperties;
+  end;
 end;
 
 end.

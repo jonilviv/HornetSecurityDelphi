@@ -5,6 +5,7 @@ object FormMain: TFormMain
   ClientHeight = 858
   ClientWidth = 1159
   Color = clBtnFace
+  DoubleBuffered = True
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -12
@@ -41,22 +42,33 @@ object FormMain: TFormMain
     ReadOnly = True
     SortType = stText
     TabOrder = 0
+    OnChange = TreeViewMainChange
     Items.NodeData = {
       070200000009540054007200650065004E006F00640065003100000000000000
       00000000FFFFFFFFFFFFFFFF000000000000000000000000000109500072006F
       0063006500730073006500730000002F0000000000000000000000FFFFFFFFFF
       FFFFFF000000000000000000000000000108530065007300730069006F006E00
       7300}
-    ExplicitHeight = 841
   end
-  object DrawGrid1: TDrawGrid
+  object ListViewDetails: TListView
     Left = 356
     Top = 0
     Width = 357
     Height = 858
     Align = alLeft
+    Columns = <
+      item
+        Caption = 'Property'
+        MaxWidth = 150
+        MinWidth = 150
+        Width = 150
+      end
+      item
+        AutoSize = True
+        Caption = 'Value'
+      end>
     TabOrder = 1
-    ExplicitHeight = 841
+    ViewStyle = vsReport
   end
   object Panel1: TPanel
     Left = 716
@@ -66,8 +78,6 @@ object FormMain: TFormMain
     Align = alClient
     Caption = 'Panel1'
     TabOrder = 2
-    ExplicitWidth = 437
-    ExplicitHeight = 841
     object memoMain: TMemo
       Left = 1
       Top = 1
@@ -89,8 +99,6 @@ object FormMain: TFormMain
       Position = 50
       Step = 1
       TabOrder = 1
-      ExplicitTop = 773
-      ExplicitWidth = 435
     end
     object CalculateSHA256Button: TButton
       Left = 1
@@ -101,8 +109,6 @@ object FormMain: TFormMain
       Caption = 'Calculate SHA256'
       TabOrder = 2
       OnClick = CalculateSHA256ButtonClick
-      ExplicitTop = 799
-      ExplicitWidth = 435
     end
   end
   object TimerMain: TTimer

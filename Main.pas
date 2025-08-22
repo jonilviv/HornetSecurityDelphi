@@ -15,18 +15,18 @@ uses
   Vcl.Dialogs,
   Vcl.ExtCtrls,
   Vcl.WinXCtrls,
-  Vcl.Grids,
   Vcl.ComCtrls,
   Vcl.StdCtrls,
   Winapi.Windows,
   Winapi.Messages,
+  Winapi.Wtsapi32,
   Win32_Process;
 
 type
   TFormMain = class(TForm, IMainView)
     TreeViewMain: TTreeView;
     Splitter1: TSplitter;
-    DrawGrid1: TDrawGrid;
+    ListViewDetails: TListView;
     Splitter2: TSplitter;
     Panel1: TPanel;
     memoMain: TMemo;
@@ -37,14 +37,33 @@ type
     procedure TimerMainTimer(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure CalculateSHA256ButtonClick(Sender: TObject);
+    procedure TreeViewMainChange(Sender: TObject; Node: TTreeNode);
+    procedure FormDestroy(Sender: TObject);
   private
     FOnTimerTick: TTimerTickEvent;
     FOnCalculateSHA256: TCalculateSHA256Event;
+    FOnSelectionChanged: TSelectionChangedEvent;
     FProcessRootNode: TTreeNode;
     FSessionsRootNode: TTreeNode;
+
+  type
+    TNodeData = class
+    public
+      Kind: TNodeKind;
+      Obj: TObject; // holds TWin32_Process for nkProcess
+      Session: TSessionInfo; // valid for nkSession
+    end;
+
+  procedure ClearPropertyGrid;
+  procedure SetPropertyRows(const rows: array of string);
+  procedure AttachProcessNodeData(ANode: TTreeNode; const AProcess: TWin32_Process);
+  procedure AttachSessionNodeData(ANode: TTreeNode; const ASession: TSessionInfo);
+  procedure FreeChildrenNodeData(ARoot: TTreeNode);
+
   public
     procedure SetOnTimerTick(const AHandler: TTimerTickEvent);
     procedure SetOnCalculateFilesHash256(const AHandler: TCalculateSHA256Event);
+    procedure SetOnTreeSelectionChanged(const AHandler: TSelectionChangedEvent);
 
     // Progress Bar
     procedure ResetProgressBar;
@@ -64,7 +83,8 @@ type
     procedure SetSessionsNodes(sessions: TArray<TSessionInfo>);
 
     // Property grid / inspector
-    procedure SetProperty(const SelectedObject: TObject);
+    procedure ShowProperties(const rows: TArray<string>);
+    procedure ClearProperties;
   end;
 
 var
@@ -127,6 +147,11 @@ begin
   FOnCalculateSHA256 := AHandler;
 end;
 
+procedure TFormMain.SetOnTreeSelectionChanged(const AHandler: TSelectionChangedEvent);
+begin
+  FOnSelectionChanged := AHandler;
+end;
+
 procedure TFormMain.CalculateSHA256ButtonClick(Sender: TObject);
 begin
   if Assigned(FOnCalculateSHA256)
@@ -145,7 +170,6 @@ begin
 end;
 
 // TreeView update
-
 procedure TFormMain.SetProcessesNodes(processes: TArray<TWin32_Process>);
 var
   parentNode, newNode: TTreeNode;
@@ -153,57 +177,231 @@ var
   processMap: TDictionary<UInt32, TWin32_Process>;
   nodeMap: TDictionary<UInt32, TTreeNode>;
 begin
-  FProcessRootNode.DeleteChildren();
-
-  processMap := TDictionary<UInt32, TWin32_Process>.Create;
-  nodeMap := TDictionary<UInt32, TTreeNode>.Create;
-
+  TreeViewMain.Items.BeginUpdate;
   try
-    for process in processes do
-      begin
-        if process.ProcessId <> 0
-        then
-          processMap.AddOrSetValue(process.ProcessId, process)
-      end;
+    FreeChildrenNodeData(FProcessRootNode);
+    FProcessRootNode.DeleteChildren();
 
-    for process in processes do
-      begin
-        if processMap.ContainsKey(process.ParentProcessId) and nodeMap.TryGetValue(process.ParentProcessId, parentNode)
-        then
-          newNode := TreeViewMain.Items.AddChild(parentNode, process.Name)
-        else
-          newNode := TreeViewMain.Items.AddChild(FProcessRootNode, process.Name);
+    processMap := TDictionary<UInt32, TWin32_Process>.Create;
+    nodeMap := TDictionary<UInt32, TTreeNode>.Create;
 
-        nodeMap.AddOrSetValue(process.ProcessId, newNode);
-      end;
+    try
+      for process in processes do
+        begin
+          if process.ProcessId <> 0
+          then
+            processMap.AddOrSetValue(process.ProcessId, process)
+        end;
+
+      for process in processes do
+        begin
+          if processMap.ContainsKey(process.ParentProcessId) and nodeMap.TryGetValue(process.ParentProcessId, parentNode)
+          then
+            newNode := TreeViewMain.Items.AddChild(parentNode, process.Name)
+          else
+            newNode := TreeViewMain.Items.AddChild(FProcessRootNode, process.Name);
+
+          AttachProcessNodeData(newNode, process);
+          nodeMap.AddOrSetValue(process.ProcessId, newNode);
+        end;
+    finally
+      processMap.Free;
+      nodeMap.Free;
+    end;
   finally
-
-    processMap.Free;
-    nodeMap.Free;
+    TreeViewMain.Items.EndUpdate;
   end;
-
-  // TreeViewMain.FullExpand;
-  // TreeViewMain.Update;
 end;
 
 procedure TFormMain.SetSessionsNodes(sessions: TArray<TSessionInfo>);
 var
-  session: TSessionInfo;
+  Session: TSessionInfo;
   s: string;
 begin
-  FSessionsRootNode.DeleteChildren();
-  s := FSessionsRootNode.Text;
+  TreeViewMain.Items.BeginUpdate;
+  try
+    FreeChildrenNodeData(FSessionsRootNode);
+    FSessionsRootNode.DeleteChildren();
+    s := FSessionsRootNode.Text;
 
-  for session in sessions do
-    begin
-      TreeViewMain.Items.AddChild(FSessionsRootNode, session.SessionId.ToString);
-    end;
+    for Session in sessions do
+      begin
+        AttachSessionNodeData(TreeViewMain.Items.AddChild(FSessionsRootNode, Session.SessionId.ToString), Session);
+      end;
+  finally
+    TreeViewMain.Items.EndUpdate;
+  end;
 end;
 
 // Property grid / inspector
-procedure TFormMain.SetProperty(const SelectedObject: TObject);
+procedure TFormMain.ClearPropertyGrid;
 begin
+  ListViewDetails.Items.Clear;
+end;
 
+procedure TFormMain.SetPropertyRows(const rows: array of string);
+var
+  i: Integer;
+  item: TListItem;
+  key, value: string;
+  sepPos: Integer;
+begin
+  ListViewDetails.Items.BeginUpdate;
+  try
+    ListViewDetails.Items.Clear;
+    for i := Low(rows) to High(rows) do
+      begin
+        sepPos := rows[i].IndexOf(':');
+        if sepPos > 0
+        then
+          begin
+            key := rows[i].Substring(0, sepPos);
+            value := rows[i].Substring(sepPos + 1).Trim;
+          end
+        else
+          begin
+            key := '';
+            value := rows[i];
+          end;
+        item := ListViewDetails.Items.Add;
+        item.Caption := key;
+        if item.SubItems.Count = 0
+        then
+          item.SubItems.Add(value)
+        else
+          item.SubItems[0] := value;
+      end;
+  finally
+    ListViewDetails.Items.EndUpdate;
+  end;
+end;
+
+procedure TFormMain.AttachProcessNodeData(ANode: TTreeNode; const AProcess: TWin32_Process);
+var
+  nd: TNodeData;
+begin
+  nd := TNodeData.Create;
+  nd.Kind := nkProcess;
+  nd.Obj := AProcess;
+  ANode.Data := nd;
+end;
+
+procedure TFormMain.AttachSessionNodeData(ANode: TTreeNode; const ASession: TSessionInfo);
+var
+  nd: TNodeData;
+begin
+  nd := TNodeData.Create;
+  nd.Kind := nkSession;
+  nd.Session := ASession;
+  ANode.Data := nd;
+end;
+
+procedure TFormMain.FreeChildrenNodeData(ARoot: TTreeNode);
+var
+  Node: TTreeNode;
+  nd: TNodeData;
+begin
+  Node := ARoot.getFirstChild;
+  while Node <> nil do
+    begin
+      if Node.Data <> nil
+      then
+        begin
+          nd := TNodeData(Node.Data);
+          nd.Free;
+          Node.Data := nil;
+        end;
+
+      Node := Node.getNextSibling;
+    end;
+end;
+
+procedure TFormMain.TreeViewMainChange(Sender: TObject; Node: TTreeNode);
+var
+  nd: TNodeData;
+  proc: TWin32_Process;
+  sel: TTreeSelection;
+begin
+  if (Node = nil) or (Node = FProcessRootNode) or (Node = FSessionsRootNode)
+  then
+    begin
+      ClearPropertyGrid;
+
+      if Assigned(FOnSelectionChanged)
+      then
+        begin
+          sel.Kind := TNodeKind.nkNone;
+          FOnSelectionChanged(sel);
+        end;
+
+      Exit;
+    end;
+
+  if Node.Data = nil
+  then
+    begin
+      ClearPropertyGrid;
+
+      if Assigned(FOnSelectionChanged)
+      then
+        begin
+          sel.Kind := nkNone;
+          FOnSelectionChanged(sel);
+        end;
+
+      Exit;
+    end;
+
+  nd := TNodeData(Node.Data);
+
+  case nd.Kind of
+    nkProcess:
+      begin
+        proc := TWin32_Process(nd.Obj);
+        if Assigned(FOnSelectionChanged)
+        then
+          begin
+            sel.Kind := nkProcess;
+            sel.process := proc;
+            FOnSelectionChanged(sel);
+          end;
+      end;
+    nkSession:
+      begin
+        if Assigned(FOnSelectionChanged)
+        then
+          begin
+            sel.Kind := nkSession;
+            sel.Session := nd.Session;
+            FOnSelectionChanged(sel);
+          end;
+      end;
+  else
+    ClearPropertyGrid;
+
+    if Assigned(FOnSelectionChanged)
+    then
+      begin
+        sel.Kind := nkNone;
+        FOnSelectionChanged(sel);
+      end;
+  end;
+end;
+
+procedure TFormMain.FormDestroy(Sender: TObject);
+begin
+  FreeChildrenNodeData(FProcessRootNode);
+  FreeChildrenNodeData(FSessionsRootNode);
+end;
+
+procedure TFormMain.ShowProperties(const rows: TArray<string>);
+begin
+  SetPropertyRows(rows);
+end;
+
+procedure TFormMain.ClearProperties;
+begin
+  ClearPropertyGrid;
 end;
 
 end.

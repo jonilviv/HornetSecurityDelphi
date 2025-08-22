@@ -4,17 +4,28 @@ interface
 
 uses
   SessionInfo,
-  Win32_Process;
+  Win32_Process,
+  Winapi.Wtsapi32,
+  System.Generics.Collections;
 
 type
   TTimerTickEvent = procedure of object;
   TCalculateSHA256Event = procedure of object;
+  TNodeKind = (nkNone, nkProcess, nkSession);
+
+  TTreeSelection = record
+    Kind: TNodeKind;
+    Process: TWin32_Process;
+    Session: TSessionInfo;
+  end;
+
+  TSelectionChangedEvent = procedure(const Selection: TTreeSelection) of object;
 
   IMainView = interface
 
     // Events
     procedure SetOnCalculateFilesHash256(const AHandler: TCalculateSHA256Event);
-    // procedure SetOnTreeViewNodeClick(const AHandler: TActionObject);
+    procedure SetOnTreeSelectionChanged(const AHandler: TSelectionChangedEvent);
     procedure SetOnTimerTick(const AHandler: TTimerTickEvent);
 
     // Progress Bar
@@ -35,7 +46,8 @@ type
     procedure SetSessionsNodes(sessions: TArray<TSessionInfo>);
 
     // Property grid / inspector
-    procedure SetProperty(const SelectedObject: TObject);
+    procedure ShowProperties(const rows: TArray<string>);
+    procedure ClearProperties;
   end;
 
 implementation
