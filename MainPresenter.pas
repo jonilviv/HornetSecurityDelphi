@@ -7,7 +7,8 @@ uses
   ProcessService,
   SessionsService,
   SHA256Service,
-  Win32_Process;
+  Win32_Process,
+  Winapi.Wtsapi32;
 
 type
   TMainPresenter = class
@@ -21,6 +22,7 @@ type
     procedure OnTimerTick;
     procedure OnCalculateSHA256Click;
     procedure OnSelectionChanged(const Selection: TTreeSelection);
+    function SessionStateToString(const State: WTS_CONNECTSTATE_CLASS): string;
   public
     constructor Create(AView: IMainView; ProcessService: IProcessService; SessionService: ISessionService; SHA256Service: ISHA256Service);
   end;
@@ -31,8 +33,7 @@ uses
   SessionInfo,
   System.Classes,
   System.SysUtils,
-  System.TypInfo,
-  Winapi.Wtsapi32;
+  System.TypInfo;
 
 constructor TMainPresenter.Create(AView: IMainView; ProcessService: IProcessService; SessionService: ISessionService; SHA256Service: ISHA256Service);
 begin
@@ -160,11 +161,44 @@ begin
     nkSession:
       begin
         SetLength(rows, 1);
-        rows[0] := 'Session state: ' + GetEnumName(TypeInfo(WTS_CONNECTSTATE_CLASS), Ord(Selection.Session.State));
+        rows[0] := 'Session state: ' + SessionStateToString(Selection.Session.State);
         _view.ShowProperties(rows);
       end
   else
     _view.ClearProperties;
+  end;
+end;
+
+{*
+  WTS_CONNECTSTATE_CLASS values and their meanings
+  Reference: https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ne-wtsapi32-wts_connectstate_class
+  
+  WTSActive (0) - User is logged on to the WinStation
+  WTSConnected (1) - WinStation is connected to the client
+  WTSConnectQuery (2) - WinStation is in the process of connecting to the client
+  WTSShadow (3) - WinStation is shadowing another WinStation
+  WTSDisconnected (4) - WinStation is active but the client is disconnected
+  WTSIdle (5) - WinStation is waiting for a client to connect
+  WTSListen (6) - WinStation is listening for a connection
+  WTSReset (7) - WinStation is being reset
+  WTSDown (8) - WinStation is down due to an error
+  WTSInit (9) - WinStation is initializing
+*}
+function TMainPresenter.SessionStateToString(const State: WTS_CONNECTSTATE_CLASS): string;
+begin
+  case State of
+    WTSActive: Result := '0 - Active: User logged on';
+    WTSConnected: Result := '1 - Connected: Connected to client';
+    WTSConnectQuery: Result := '2 - Connect Query: Connecting to client';
+    WTSShadow: Result := '3 - Shadow: Shadowing another session';
+    WTSDisconnected: Result := '4 - Disconnected: Active but client disconnected';
+    WTSIdle: Result := '5 - Idle: Waiting for client connection';
+    WTSListen: Result := '6 - Listen: Listening for connection';
+    WTSReset: Result := '7 - Reset: Being reset';
+    WTSDown: Result := '8 - Down: Down due to error';
+    WTSInit: Result := '9 - Init: Initializing';
+  else
+    Result := Ord(State).ToString + ' - Unknown: Undefined state';
   end;
 end;
 
