@@ -38,6 +38,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure CalculateSHA256ButtonClick(Sender: TObject);
     procedure TreeViewMainChange(Sender: TObject; Node: TTreeNode);
+
     procedure FormDestroy(Sender: TObject);
   private
     FOnTimerTick: TTimerTickEvent;
@@ -54,8 +55,6 @@ type
       Session: TSessionInfo; // valid for nkSession
     end;
 
-  procedure ClearPropertyGrid;
-  procedure SetPropertyRows(const rows: array of string);
   procedure AttachProcessNodeData(ANode: TTreeNode; const AProcess: TWin32_Process);
   procedure AttachSessionNodeData(ANode: TTreeNode; const ASession: TSessionInfo);
   procedure FreeChildrenNodeData(ARoot: TTreeNode);
@@ -234,12 +233,7 @@ begin
 end;
 
 // Property grid / inspector
-procedure TFormMain.ClearPropertyGrid;
-begin
-  ListViewDetails.Items.Clear;
-end;
-
-procedure TFormMain.SetPropertyRows(const rows: array of string);
+procedure TFormMain.ShowProperties(const rows: TArray<string>);
 var
   i: Integer;
   item: TListItem;
@@ -247,11 +241,14 @@ var
   sepPos: Integer;
 begin
   ListViewDetails.Items.BeginUpdate;
+
   try
     ListViewDetails.Items.Clear;
+
     for i := Low(rows) to High(rows) do
       begin
         sepPos := rows[i].IndexOf(':');
+
         if sepPos > 0
         then
           begin
@@ -263,8 +260,10 @@ begin
             key := '';
             value := rows[i];
           end;
+
         item := ListViewDetails.Items.Add;
         item.Caption := key;
+
         if item.SubItems.Count = 0
         then
           item.SubItems.Add(value)
@@ -274,6 +273,11 @@ begin
   finally
     ListViewDetails.Items.EndUpdate;
   end;
+end;
+
+procedure TFormMain.ClearProperties;
+begin
+  ListViewDetails.Items.Clear;
 end;
 
 procedure TFormMain.AttachProcessNodeData(ANode: TTreeNode; const AProcess: TWin32_Process);
@@ -302,6 +306,7 @@ var
   nd: TNodeData;
 begin
   Node := ARoot.getFirstChild;
+
   while Node <> nil do
     begin
       if Node.Data <> nil
@@ -322,26 +327,9 @@ var
   proc: TWin32_Process;
   sel: TTreeSelection;
 begin
-  if (Node = nil) or (Node = FProcessRootNode) or (Node = FSessionsRootNode)
+  if (Node = nil) or (Node = FProcessRootNode) or (Node = FSessionsRootNode) or (Node.Data = nil)
   then
     begin
-      ClearPropertyGrid;
-
-      if Assigned(FOnSelectionChanged)
-      then
-        begin
-          sel.Kind := TNodeKind.nkNone;
-          FOnSelectionChanged(sel);
-        end;
-
-      Exit;
-    end;
-
-  if Node.Data = nil
-  then
-    begin
-      ClearPropertyGrid;
-
       if Assigned(FOnSelectionChanged)
       then
         begin
@@ -358,6 +346,7 @@ begin
     nkProcess:
       begin
         proc := TWin32_Process(nd.Obj);
+
         if Assigned(FOnSelectionChanged)
         then
           begin
@@ -377,8 +366,6 @@ begin
           end;
       end;
   else
-    ClearPropertyGrid;
-
     if Assigned(FOnSelectionChanged)
     then
       begin
@@ -392,16 +379,6 @@ procedure TFormMain.FormDestroy(Sender: TObject);
 begin
   FreeChildrenNodeData(FProcessRootNode);
   FreeChildrenNodeData(FSessionsRootNode);
-end;
-
-procedure TFormMain.ShowProperties(const rows: TArray<string>);
-begin
-  SetPropertyRows(rows);
-end;
-
-procedure TFormMain.ClearProperties;
-begin
-  ClearPropertyGrid;
 end;
 
 end.
